@@ -1,0 +1,404 @@
+---
+title: "Publication-Ready Method Comparison Plots"
+author: "GWAS Analysis Pipeline"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: united
+    code_folding: show
+  pdf_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 18,
+  fig.height = 9,
+  dpi = 300
+)
+```
+
+# Overview
+
+Creates correlation plots comparing image-based and manual measurements for:
+
+1. **Pod length** (2 environments: aea23, burkey23)  
+2. **Seeds per pod** (3 environments: aea22, aea23, burkey23)
+
+
+# Load Required Libraries
+
+```{r load-libraries}
+library(tidyverse)
+library(ggplot2)
+library(gridExtra)
+library(cowplot)
+library(Metrics)
+library(broom)
+library(scales)
+
+# Set global theme
+theme_set(theme_minimal(base_size = 14))
+```
+
+# Helper Functions
+
+```{r helper-functions}
+# Function to calculate statistics
+calculate_stats <- function(x, y) {
+  # Remove missing values
+  valid <- complete.cases(x, y)
+  x_clean <- x[valid]
+  y_clean <- y[valid]
+  
+  if (length(x_clean) < 3) {
+    return(list(
+      r = NA, p_value = NA, rmse = NA, mae = NA,
+      n = length(x_clean), slope = NA, intercept = NA
+    ))
+  }
+  
+  # Correlation test
+  cor_test <- cor.test(x_clean, y_clean, method = "pearson")
+  
+  # Linear model
+  lm_fit <- lm(y_clean ~ x_clean)
+  lm_coef <- coef(lm_fit)
+  
+  # RMSE and MAE
+  rmse_val <- rmse(y_clean, x_clean)
+  mae_val <- mae(y_clean, x_clean)
+  
+  return(list(
+    r = cor_test$estimate,
+    p_value = cor_test$p.value,
+    rmse = rmse_val,
+    mae = mae_val,
+    n = length(x_clean),
+    slope = lm_coef[2],
+    intercept = lm_coef[1]
+  ))
+}
+
+# Format p-value
+format_pvalue <- function(p) {
+  if (is.na(p)) return("p = NA")
+  if (p < 0.001) return("p < 0.001")
+  if (p < 0.01) return(sprintf("p = %.3f", p))
+  return(sprintf("p = %.3f", p))
+}
+```
+
+# Load Data
+
+```{r load-data}
+# Load BLUP results
+data_file <- "../BLUP_Analysis_Results/Combined_BLUP_Results.csv"
+df <- read_csv(data_file, show_col_types = FALSE)
+
+cat("📊 Data Summary\n")
+cat("  • Total genotypes:", nrow(df), "\n\n")
+
+# Filter for genotypes with sufficient data
+# Pod length: use genotypes with manual data (N_Obs >= 4, representing 2+ environments)
+pod_length_filter <- df$N_Obs_pod_length_manual >= 4
+pod_length_data <- df %>% filter(pod_length_filter)
+
+# Seeds per pod: use genotypes with manual data (N_Obs >= 4, representing multiple environments)
+seed_per_pod_filter <- df$N_Obs_seed_per_pod_manual >= 4
+seed_per_pod_data <- df %>% filter(seed_per_pod_filter)
+
+cat("  • Pod length:", sum(pod_length_filter), "genotypes with manual data (≥2 env)\n")
+cat("  • Seeds per pod:", sum(seed_per_pod_filter), "genotypes with manual data (≥2 env)\n")
+```
+
+# Pod Length Comparison
+
+```{r pod-length-plot, fig.width=8, fig.height=8}
+# Extract data
+x_pod <- pod_length_data$Raw_Mean_pod_length_image
+y_pod <- pod_length_data$Raw_Mean_pod_length_manual
+
+# Calculate statistics
+pod_stats <- calculate_stats(x_pod, y_pod)
+
+# Create plot data
+pod_plot_data <- data.frame(
+  Image = x_pod,
+  Manual = y_pod
+) %>% drop_na()
+
+# Determine plot range
+pod_min <- min(c(pod_plot_data$Image, pod_plot_data$Manual)) - 0.2
+pod_max <- max(c(pod_plot_data$Image, pod_plot_data$Manual)) + 0.2
+
+# Statistics text
+pod_stats_text <- paste0(
+  "n = ", pod_stats$n, "\n",
+  "r = ", sprintf("%.3f", pod_stats$r), "\n",
+  format_pvalue(pod_stats$p_value), "\n",
+  "RMSE = ", sprintf("%.3f", pod_stats$rmse)
+)
+
+# Create plot
+pod_length_plot <- ggplot(pod_plot_data, aes(x = Image, y = Manual)) +
+  geom_point(alpha = 0.6, size = 3, color = "#2E86AB", 
+             shape = 21, fill = "#2E86AB", stroke = 0.5) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", 
+              linewidth = 1, alpha = 0.7, color = "black") +
+  geom_smooth(method = "lm", se = FALSE, color = "red", 
+              linewidth = 1, alpha = 0.8) +
+  coord_fixed(ratio = 1, xlim = c(pod_min, pod_max), ylim = c(pod_min, pod_max)) +
+  labs(
+    title = "Pod Length: Image-based vs Manual Measurement",
+    x = "Image-based Pod Length (cm)",
+    y = "Manual Pod Length (cm)"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", margin = margin(b = 20)),
+    axis.title.x = element_text(size = 14, face = "bold"),
+    axis.title.y = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 11),
+    panel.grid.major = element_line(alpha = 0.3),
+    panel.grid.minor = element_blank(),
+    aspect.ratio = 1
+  ) +
+  annotate("label", x = pod_min + 0.5, y = pod_max - 0.5,
+           label = pod_stats_text, hjust = 0, vjust = 1,
+           size = 4, fontface = "bold",
+           fill = "white", alpha = 0.8, label.size = 1)
+
+print(pod_length_plot)
+
+# Save individual plot
+ggsave("Pod_Length_Method_Comparison.png", pod_length_plot, 
+       width = 8, height = 8, dpi = 300, bg = "white")
+ggsave("Pod_Length_Method_Comparison.pdf", pod_length_plot, 
+       width = 8, height = 8, device = cairo_pdf, bg = "white")
+ggsave("Pod_Length_Method_Comparison.svg", pod_length_plot, 
+       width = 8, height = 8, bg = "white")
+
+cat("✓ Saved Pod Length plots\n")
+```
+
+# Seeds per Pod Comparison
+
+```{r seeds-per-pod-plot, fig.width=8, fig.height=8}
+# Extract data
+x_seed <- seed_per_pod_data$Raw_Mean_seed_per_pod_image
+y_seed <- seed_per_pod_data$Raw_Mean_seed_per_pod_manual
+
+# Calculate statistics
+seed_stats <- calculate_stats(x_seed, y_seed)
+
+# Create plot data
+seed_plot_data <- data.frame(
+  Image = x_seed,
+  Manual = y_seed
+) %>% drop_na()
+
+# Determine plot range
+seed_min <- min(c(seed_plot_data$Image, seed_plot_data$Manual)) - 0.2
+seed_max <- max(c(seed_plot_data$Image, seed_plot_data$Manual)) + 0.2
+
+# Statistics text
+seed_stats_text <- paste0(
+  "n = ", seed_stats$n, "\n",
+  "r = ", sprintf("%.3f", seed_stats$r), "\n",
+  format_pvalue(seed_stats$p_value), "\n",
+  "RMSE = ", sprintf("%.3f", seed_stats$rmse)
+)
+
+# Create plot
+seeds_per_pod_plot <- ggplot(seed_plot_data, aes(x = Image, y = Manual)) +
+  geom_point(alpha = 0.6, size = 3, color = "#A23B72",
+             shape = 21, fill = "#A23B72", stroke = 0.5) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed",
+              linewidth = 1, alpha = 0.7, color = "black") +
+  geom_smooth(method = "lm", se = FALSE, color = "red",
+              linewidth = 1, alpha = 0.8) +
+  coord_fixed(ratio = 1, xlim = c(seed_min, seed_max), ylim = c(seed_min, seed_max)) +
+  labs(
+    title = "Seeds per Pod: Image-based vs Manual Measurement",
+    x = "Image-based Seeds per Pod",
+    y = "Manual Seeds per Pod"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", margin = margin(b = 20)),
+    axis.title.x = element_text(size = 14, face = "bold"),
+    axis.title.y = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 11),
+    panel.grid.major = element_line(alpha = 0.3),
+    panel.grid.minor = element_blank(),
+    aspect.ratio = 1
+  ) +
+  annotate("label", x = seed_min + 0.3, y = seed_max - 0.3,
+           label = seed_stats_text, hjust = 0, vjust = 1,
+           size = 4, fontface = "bold",
+           fill = "white", alpha = 0.8, label.size = 1)
+
+print(seeds_per_pod_plot)
+
+# Save individual plot
+ggsave("Seeds_per_Pod_Method_Comparison.png", seeds_per_pod_plot,
+       width = 8, height = 8, dpi = 300, bg = "white")
+ggsave("Seeds_per_Pod_Method_Comparison.pdf", seeds_per_pod_plot,
+       width = 8, height = 8, device = cairo_pdf, bg = "white")
+ggsave("Seeds_per_Pod_Method_Comparison.svg", seeds_per_pod_plot,
+       width = 8, height = 8, bg = "white")
+
+cat("✓ Saved Seeds per Pod plots\n")
+```
+
+# Combined Comparison Plot
+
+```{r combined-plot, fig.width=18, fig.height=9}
+# Create panel A (Pod Length)
+panel_a <- ggplot(pod_plot_data, aes(x = Image, y = Manual)) +
+  geom_point(alpha = 0.6, size = 3, color = "#2E86AB",
+             shape = 21, fill = "#2E86AB", stroke = 0.5) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed",
+              linewidth = 1, alpha = 0.7, color = "black") +
+  geom_smooth(method = "lm", se = FALSE, color = "red",
+              linewidth = 1, alpha = 0.8) +
+  coord_fixed(ratio = 1, xlim = c(pod_min, pod_max), ylim = c(pod_min, pod_max)) +
+  labs(
+    title = "(A) Pod Length Comparison",
+    x = "Image-based Pod Length (cm)",
+    y = "Manual Pod Length (cm)"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", margin = margin(b = 15)),
+    axis.title.x = element_text(size = 16, face = "bold"),
+    axis.title.y = element_text(size = 16, face = "bold"),
+    axis.text = element_text(size = 13),
+    panel.grid.major = element_line(alpha = 0.3),
+    panel.grid.minor = element_blank(),
+    aspect.ratio = 1
+  ) +
+  annotate("label", x = pod_min + 0.5, y = pod_max - 0.5,
+           label = pod_stats_text, hjust = 0, vjust = 1,
+           size = 4.5, fontface = "bold",
+           fill = "white", alpha = 0.8, label.size = 1)
+
+# Create panel B (Seeds per Pod)
+panel_b <- ggplot(seed_plot_data, aes(x = Image, y = Manual)) +
+  geom_point(alpha = 0.6, size = 3, color = "#A23B72",
+             shape = 21, fill = "#A23B72", stroke = 0.5) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed",
+              linewidth = 1, alpha = 0.7, color = "black") +
+  geom_smooth(method = "lm", se = FALSE, color = "red",
+              linewidth = 1, alpha = 0.8) +
+  coord_fixed(ratio = 1, xlim = c(seed_min, seed_max), ylim = c(seed_min, seed_max)) +
+  labs(
+    title = "(B) Seeds per Pod Comparison",
+    x = "Image-based Seeds per Pod",
+    y = "Manual Seeds per Pod"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", margin = margin(b = 15)),
+    axis.title.x = element_text(size = 16, face = "bold"),
+    axis.title.y = element_text(size = 16, face = "bold"),
+    axis.text = element_text(size = 13),
+    panel.grid.major = element_line(alpha = 0.3),
+    panel.grid.minor = element_blank(),
+    aspect.ratio = 1
+  ) +
+  annotate("label", x = seed_min + 0.3, y = seed_max - 0.3,
+           label = seed_stats_text, hjust = 0, vjust = 1,
+           size = 4.5, fontface = "bold",
+           fill = "white", alpha = 0.8, label.size = 1)
+
+# Combine panels
+combined_plot <- plot_grid(panel_a, panel_b, ncol = 2, align = "hv")
+
+print(combined_plot)
+
+# Save combined plot
+ggsave("Combined_Method_Comparison.png", combined_plot,
+       width = 18, height = 9, dpi = 300, bg = "white")
+ggsave("Combined_Method_Comparison.pdf", combined_plot,
+       width = 18, height = 9, device = cairo_pdf, bg = "white")
+ggsave("Combined_Method_Comparison.svg", combined_plot,
+       width = 18, height = 9, bg = "white")
+
+cat("✓ Saved combined comparison plot\n")
+```
+
+# Summary Statistics Table
+
+```{r summary-table}
+# Create summary data frame
+summary_data <- data.frame(
+  Trait = c("Pod Length", "Seeds per Pod"),
+  Environments_Manual = c("2 (aea23, burkey23)", "3 (aea22, aea23, burkey23)"),
+  N_Genotypes = c(pod_stats$n, seed_stats$n),
+  Correlation_r = c(pod_stats$r, seed_stats$r),
+  P_value = c(pod_stats$p_value, seed_stats$p_value),
+  RMSE = c(pod_stats$rmse, seed_stats$rmse),
+  MAE = c(pod_stats$mae, seed_stats$mae),
+  Slope = c(pod_stats$slope, seed_stats$slope),
+  Intercept = c(pod_stats$intercept, seed_stats$intercept)
+)
+
+# Display table
+knitr::kable(summary_data, digits = 3, caption = "Method Comparison Summary Statistics")
+
+# Save to CSV
+write_csv(summary_data, "Method_Comparison_Summary.csv")
+cat("\n✓ Saved summary table: Method_Comparison_Summary.csv\n")
+```
+
+# Detailed Results
+
+## Pod Length
+
+```{r pod-length-summary}
+cat("Pod Length Comparison:\n")
+cat("  • Sample size:", pod_stats$n, "genotypes\n")
+cat("  • Correlation: r =", sprintf("%.3f", pod_stats$r), 
+    "(", format_pvalue(pod_stats$p_value), ")\n")
+cat("  • RMSE:", sprintf("%.3f", pod_stats$rmse), "\n")
+cat("  • MAE:", sprintf("%.3f", pod_stats$mae), "\n")
+cat("  • Linear fit: y =", sprintf("%.3f", pod_stats$slope), "x +", 
+    sprintf("%.3f", pod_stats$intercept), "\n")
+```
+
+## Seeds per Pod
+
+```{r seeds-summary}
+cat("Seeds per Pod Comparison:\n")
+cat("  • Sample size:", seed_stats$n, "genotypes\n")
+cat("  • Correlation: r =", sprintf("%.3f", seed_stats$r),
+    "(", format_pvalue(seed_stats$p_value), ")\n")
+cat("  • RMSE:", sprintf("%.3f", seed_stats$rmse), "\n")
+cat("  • MAE:", sprintf("%.3f", seed_stats$mae), "\n")
+cat("  • Linear fit: y =", sprintf("%.3f", seed_stats$slope), "x +",
+    sprintf("%.3f", seed_stats$intercept), "\n")
+```
+
+# Files Created
+
+```{r files-created}
+cat("\n📁 Output Files:\n")
+cat("  • Pod_Length_Method_Comparison.[png/pdf/svg]\n")
+cat("  • Seeds_per_Pod_Method_Comparison.[png/pdf/svg]\n")
+cat("  • Combined_Method_Comparison.[png/pdf/svg]\n")
+cat("  • Method_Comparison_Summary.csv\n")
+cat("\n🎉 Method comparison analysis completed successfully!\n")
+```
+
+# Session Information
+
+```{r session-info}
+sessionInfo()
+```

@@ -1,0 +1,150 @@
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(ggpubr)
+#install.packages("mvtnorm")
+
+library(inti)
+library(lme4)
+library(GAPIT)
+
+```
+
+
+
+```{r}
+getwd()
+#list.dirs(".")
+```
+
+```{r}
+#read data
+pheno <- pod_morphological traits_2224
+
+#head(leaf_df)
+#length(unique(pheno$geno))
+
+##set as factors
+cols <- c("block", "line", "env")
+
+pheno[cols] <- lapply(pheno[cols], as.factor)
+
+###add total leaflet area
+str(pheno)
+```
+
+```{r}
+start_time <- Sys.time()
+#create final blups dataframe
+line <- unique(pheno$line)
+final_data <- data.frame(line)
+
+##Final descriptive table
+descriptive_stats <- data.frame(character(0), 
+                                numeric(0), 
+                                numeric(0),
+                                numeric(0),
+                                numeric(0),
+                                numeric(0),
+                                numeric(0),
+                                numeric(0),stringsAsFactors=FALSE)
+  #assign column names
+colnames(descriptive_stats) <- c("Trait","Mean","Median","Min","Max","SD","CV","H2.cullis")
+
+#create the anova sort of table
+grp <- c("line", "env", "block", "Residual" )
+variance_table <- data.frame(grp)
+
+
+
+##list of traits
+traits <- colnames(pheno)[4:ncol(pheno)]
+
+##loop through the traits
+
+t =1 
+for(t in 1:length(traits)){
+ 
+    trait = traits[t]
+  
+    hr <- H2cal(data = pheno,
+            trait = trait,
+            gen.name = "line",
+            rep.n = 6,
+            env.n = 3,
+            env.name = unique(pheno$env),
+            random.model = "1 + (1|line) + env +(1|env:line) + (1|env:block)",
+            fixed.model = "0 + line + env +(1|env:line) + (1|env:block)",
+            emmeans = FALSE,
+            plot_diag = FALSE,
+            outliers.rm = TRUE)
+    
+    ####### blups
+    blup <- hr$blups
+    
+    #add blups to table
+    final_data <- merge(final_data, blup, by = "line")
+    
+
+     ###########descriptive
+     Mn <- mean(as.numeric(unlist(blup[,2])))#mean
+     Md <- median(as.numeric(unlist(blup[,2])))
+     Min <- min(as.numeric(unlist(blup[,2])))
+     Max <- max(as.numeric(unlist(blup[,2])))
+     Sd <- sd(as.numeric(unlist(blup[,2])))
+     CV <- Sd/Mn
+     H2.cullis <- hr$tabsmr$H2.c
+     
+     #create a vector with variables
+     to_add <- c(trait,Mn,Md,Min,Max, Sd, CV, H2.cullis)
+     #add to the df
+     descriptive_stats <- descriptive_stats %>% add_row(Trait = trait,
+                                                   Mean = Mn,
+                                                   Median = Md,
+                                                   Min = Min,
+                                                   Max = Max,
+                                                   SD = Sd,
+                                                   CV = CV,
+                                                   H2.cullis = H2.cullis)
+
+     
+       #descriptive
+    descriptive_stats[, -1] <- round(descriptive_stats[, -1], 2)#apply to whole table
+    
+    ############## variance components
+    y <- as.data.frame(VarCorr(hr$model)) #extract variance components as a table
+
+    #extract variance components (column 1, 4 and round to 2 d.p)
+    y1 <- y[, c(1,4)] %>% mutate_if(is.numeric, ~round(., 2))
+    y1$percent <- (y1[,2]/ sum(y1$vcov)*100)  #new column with %
+
+    y1$percent <- round(y1$percent, 1) #round off to o d.p.
+
+    names(y1)[2]<-paste0(trait,"_var")
+    
+    
+    variance_table <- merge(variance_table, y1, by='grp')
+    
+    print(paste0("Done with: ", trait))
+}
+
+#get sum of variance table components
+###add totals row
+row_totals <- colSums(variance_table[,2:ncol(variance_table)])
+variance_table[nrow(variance_table) + 1, ] <- c(a = "Totals", as.list(row_totals))
+
+#save
+write.csv(final_data,"C:\\Users\\naresh89\\Desktop\\My projects\\gwas\\pod_prediction\\Zaki\\final data\\blups\\blups_PL.csv", row.names = F)
+
+write.csv( descriptive_stats, "C:\\Users\\naresh89\\Desktop\\My projects\\gwas\\pod_prediction\\Zaki\\final data\\blups\\summary_PL.csv", row.names = F)
+write.csv(variance_table, "C:\\Users\\naresh89\\Desktop\\My projects\\gwas\\pod_prediction\\Zaki\\final data\\blups\\variance_table_PL.csv", row.names = F)
+
+end_time <- Sys.time()
+print(paste0("This code took long: ", end_time-start_time))
+```
+
+end of BLUPs generating 

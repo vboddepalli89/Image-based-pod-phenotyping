@@ -1,0 +1,412 @@
+---
+``{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(ggpubr)
+#install.packages("mvtnorm")
+
+library(inti)
+library(lme4)
+library(GAPIT)
+
+```
+
+
+#GAPIT starts 
+```{r}
+
+#setwd("C:\\Users\\naresh89\\Desktop\\My projects\\GWAS\\Analysis_2024\\BLINK_MLM")
+myY <- read.table("C:\\Users\\naresh89\\Desktop\\pod_gwas_analysis\\BLUEs_Analysis_Results\\BLUEs_Results\\GWAS\\blues.csv _phenotype.txt", head = TRUE)
+myG <- read.table("C:\\Users\\naresh89\\Desktop\\pod_gwas_analysis\\BLUEs_Analysis_Results\\BLUEs_Results\\GWAS\\blues.csv _genotype.hmp.txt", comment.char = "")
+
+#myG <- read.table("mdp_genotype_test.hmp.txt", head = FALSE)
+myGAPIT <- GAPIT(G=myG, output.numerical=TRUE)
+myGD= myGAPIT$GD
+myGM= myGAPIT$GM
+
+
+#myGD=read.table("C:\\Users\\naresh89\\Desktop\\My projects\\GWAS\\Analysis_2024\\2023\\GAPIT.Genotype.Numerical.txt",head=T)
+#myGM=read.table("C:\\Users\\naresh89\\Desktop\\My projects\\GWAS\\Analysis_2024\\2023\\GAPIT.Genotype.map.txt",head=T)
+#Step 2: Run GAPIT
+#setwd("C:\\Users\\naresh89\\Desktop\\My projects\\GWAS\\Analysis_2024\\2023\\BLINK_farmCPU")
+myGAPIT <- GAPIT(
+  Y=myY,
+  GD=myGD,
+  GM=myGM,
+  PCA.total=3,
+  SNP.MAF = 0.05,
+  Multiple_analysis=TRUE,
+  model=c("Blink", "farmCPU", "MLM")
+  )
+
+```
+# Clean Compound Manhattan Plot Generator for Image-Based GWAS Results
+# Creates Manhattan plots with QQ plots for image-based traits only
+# No suffixes, no main heading, clean publication style
+
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(grid)
+library(cowplot)
+
+# Set working directory and define paths
+data_dir <- "C:/Users/naresh89/Desktop/poddata/manhatten"
+output_dir <- "plots"
+
+# Create output directory if it doesn't exist
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE)
+}
+
+# Define models and image-based traits (no suffixes)
+models <- c("BLINK", "FarmCPU", "MLM")
+image_traits <- c("pod_curvature_image", "pod_length_image", "seed_per_pod_image")
+
+# Clean trait names (no suffixes)
+trait_names <- list(
+  "pod_curvature_image" = "Pod curvature",
+  "pod_length_image" = "Pod length", 
+  "seed_per_pod_image" = "Seeds per pod"
+)
+
+# Define color palette for models
+model_colors <- c("BLINK" = "#E31A1C", "FarmCPU" = "#1F78B4", "MLM" = "#33A02C")
+
+# Function to read and process GWAS data
+read_gwas_data <- function(file_path, model_name) {
+  cat("Reading:", file_path, "\n")
+  
+  if (!file.exists(file_path)) {
+    cat("Warning: File not found:", file_path, "\n")
+    return(NULL)
+  }
+  
+  # Read the data
+  data <- read.csv(file_path, sep = ",", header = TRUE, stringsAsFactors = FALSE)
+  
+  # Clean column names
+  colnames(data) <- gsub("[^A-Za-z0-9._]", "", colnames(data))
+  
+  # Check if required columns exist
+  required_cols <- c("Chr", "Pos", "P.value")
+  missing_cols <- required_cols[!required_cols %in% colnames(data)]
+  
+  if (length(missing_cols) > 0) {
+    cat("Missing columns in", file_path, ":", paste(missing_cols, collapse = ", "), "\n")
+    return(NULL)
+  }
+  
+  # Process data
+  data$Model <- model_name
+  data$logP <- -log10(data$P.value)
+  
+  # Remove rows with missing or invalid p-values
+  data <- data[!is.na(data$P.value) & data$P.value > 0, ]
+  
+  # Ensure chromosome is numeric
+  data$Chr <- as.numeric(data$Chr)
+  data <- data[!is.na(data$Chr), ]
+  
+  return(data)
+}
+
+# Function to calculate cumulative positions for Manhattan plot
+calculate_cumulative_positions <- function(data) {
+  # Sort by chromosome and position
+  data <- data[order(data$Chr, data$Pos), ]
+  
+  # Calculate cumulative positions
+  chr_lengths <- data %>%
+    group_by(Chr) %>%
+    summarise(max_pos = max(Pos), .groups = 'drop') %>%
+    arrange(Chr)
+  
+  chr_lengths$cumulative_start <- c(0, cumsum(chr_lengths$max_pos)[-nrow(chr_lengths)])
+  chr_lengths$cumulative_end <- cumsum(chr_lengths$max_pos)
+  chr_lengths$cumulative_mid <- (chr_lengths$cumulative_start + chr_lengths$cumulative_end) / 2
+  
+  # Merge with data
+  data <- merge(data, chr_lengths[, c("Chr", "cumulative_start")], by = "Chr")
+  data$cumulative_pos <- data$Pos + data$cumulative_start
+  
+  return(list(data = data, chr_info = chr_lengths))
+}
+
+# Function to create clean Manhattan plot (no main heading)
+create_manhattan_plot <- function(data_list, trait_name, significance_threshold = 5) {
+  # Combine all model data
+  combined_data <- do.call(rbind, data_list)
+  
+  # Calculate cumulative positions
+  pos_info <- calculate_cumulative_positions(combined_data)
+  plot_data <- pos_info$data
+  chr_info <- pos_info$chr_info
+  
+  # Get clean trait name (no suffix)
+  clean_name <- trait_names[[trait_name]]
+  if (is.null(clean_name)) {
+    clean_name <- gsub("_", " ", trait_name)
+  }
+  
+  # Create the plot
+  p <- ggplot(plot_data, aes(x = cumulative_pos, y = logP, color = Model)) +
+    geom_point(alpha = 0.7, size = 1.0) +
+    scale_color_manual(values = model_colors) +
+    geom_hline(yintercept = significance_threshold, linetype = "dashed", color = "red", alpha = 0.8) +
+    geom_hline(yintercept = 3, linetype = "dotted", color = "blue", alpha = 0.6) +
+    scale_x_continuous(breaks = chr_info$cumulative_mid, labels = chr_info$Chr, expand = c(0.01, 0)) +
+    scale_y_continuous(expand = c(0.02, 0)) +
+    labs(x = "Chromosome", 
+         y = expression(-log[10](italic(p))),
+         color = "Method") +
+    theme_minimal() +
+    theme(
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA, size = 0.5),
+      axis.text.x = element_text(angle = 0, hjust = 0.5, size = 11, color = "black"),
+      axis.text.y = element_text(size = 11, color = "black"),
+      axis.title = element_text(size = 12, face = "bold", color = "black"),
+      legend.position = "bottom",
+      legend.title = element_text(size = 11, face = "bold"),
+      legend.text = element_text(size = 10),
+      plot.margin = margin(10, 15, 10, 15),
+      axis.line = element_line(color = "black", size = 0.3)
+    )
+  
+  # Add alternating chromosome background
+  for (i in seq(1, nrow(chr_info), 2)) {
+    p <- p + annotate("rect", 
+                     xmin = chr_info$cumulative_start[i], 
+                     xmax = chr_info$cumulative_end[i],
+                     ymin = -Inf, ymax = Inf, 
+                     alpha = 0.05, fill = "grey")
+  }
+  
+  return(p)
+}
+
+# Function to create clean QQ plot
+create_qq_plot <- function(data_list, trait_name) {
+  # Combine all model data
+  combined_data <- do.call(rbind, data_list)
+  
+  # Calculate expected vs observed p-values for each model
+  qq_data <- combined_data %>%
+    group_by(Model) %>%
+    arrange(P.value) %>%
+    mutate(
+      expected = -log10(ppoints(n())),
+      observed = -log10(P.value)
+    ) %>%
+    ungroup()
+  
+  # Create QQ plot
+  max_val <- max(c(qq_data$expected, qq_data$observed), na.rm = TRUE)
+  
+  p <- ggplot(qq_data, aes(x = expected, y = observed, color = Model)) +
+    geom_point(alpha = 0.7, size = 0.8) +
+    geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+    scale_color_manual(values = model_colors) +
+    xlim(0, max_val) + ylim(0, max_val) +
+    labs(x = expression("Expected " * -log[10](italic(p))),
+         y = expression("Observed " * -log[10](italic(p))),
+         color = "Method") +
+    theme_minimal() +
+    theme(
+      panel.border = element_rect(color = "black", fill = NA, size = 0.5),
+      axis.text = element_text(size = 10, color = "black"),
+      axis.title = element_text(size = 11, face = "bold", color = "black"),
+      legend.position = "none",
+      plot.margin = margin(10, 15, 10, 15),
+      axis.line = element_line(color = "black", size = 0.3)
+    )
+  
+  return(p)
+}
+
+# Function to calculate genomic inflation factor (lambda)
+calculate_lambda <- function(p_values) {
+  chisq <- qchisq(1 - p_values, 1)
+  lambda <- median(chisq, na.rm = TRUE) / qchisq(0.5, 1)
+  return(lambda)
+}
+
+# Main processing function
+process_image_traits <- function() {
+  cat("Processing image-based GWAS traits...\n")
+  
+  all_plots <- list()
+  summary_stats <- data.frame()
+  
+  for (trait in image_traits) {
+    cat("\nProcessing trait:", trait, "\n")
+    
+    # Read data for all models
+    trait_data <- list()
+    trait_stats <- list()
+    
+    for (model in models) {
+      file_pattern <- paste0("GAPIT.Association.GWAS_Results.", model, ".", trait, ".csv")
+      file_path <- file.path(data_dir, file_pattern)
+      
+      data <- read_gwas_data(file_path, model)
+      if (!is.null(data)) {
+        trait_data[[model]] <- data
+        
+        # Calculate summary statistics
+        lambda <- calculate_lambda(data$P.value)
+        min_p <- min(data$P.value, na.rm = TRUE)
+        max_logp <- max(data$logP, na.rm = TRUE)
+        n_snps <- nrow(data)
+        n_sig <- sum(data$logP >= 5, na.rm = TRUE)
+        
+        trait_stats[[model]] <- data.frame(
+          Trait = trait,
+          Model = model,
+          Lambda = round(lambda, 3),
+          Min_P = min_p,
+          Max_LogP = round(max_logp, 2),
+          N_SNPs = n_snps,
+          N_Significant = n_sig,
+          stringsAsFactors = FALSE
+        )
+      }
+    }
+    
+    if (length(trait_data) > 0) {
+      # Create plots
+      manhattan_plot <- create_manhattan_plot(trait_data, trait)
+      qq_plot <- create_qq_plot(trait_data, trait)
+      
+      # Combine Manhattan and QQ plots
+      combined_plot <- plot_grid(
+        manhattan_plot, qq_plot,
+        ncol = 2, nrow = 1,
+        rel_widths = c(2.5, 1),
+        align = "h"
+      )
+      
+      all_plots[[trait]] <- combined_plot
+      
+      # Combine summary statistics
+      if (length(trait_stats) > 0) {
+        trait_summary <- do.call(rbind, trait_stats)
+        summary_stats <- rbind(summary_stats, trait_summary)
+      }
+      
+      cat("Completed trait:", trait, "- Models processed:", paste(names(trait_data), collapse = ", "), "\n")
+    }
+  }
+  
+  return(list(plots = all_plots, stats = summary_stats))
+}
+
+# Function to create final compound plot (no main heading)
+create_compound_plot <- function(all_plots) {
+  if (length(all_plots) == 0) {
+    stop("No plots to combine!")
+  }
+  
+  # Create the compound plot without overall title
+  compound_plot <- plot_grid(
+    plotlist = all_plots,
+    ncol = 1,
+    nrow = length(all_plots),
+    align = "v",
+    axis = "lr",
+    labels = c("A", "B", "C")[1:length(all_plots)],
+    label_size = 16,
+    label_fontface = "bold"
+  )
+  
+  return(compound_plot)
+}
+
+# Execute the analysis
+cat("Starting clean compound Manhattan plot generation...\n")
+cat("Models:", paste(models, collapse = ", "), "\n")
+cat("Image-based traits:", paste(image_traits, collapse = ", "), "\n")
+cat("Data directory:", data_dir, "\n")
+cat("Output directory:", output_dir, "\n\n")
+
+# Process image-based traits
+results <- process_image_traits()
+
+if (length(results$plots) == 0) {
+  stop("No plots were generated. Please check your data files and paths.")
+}
+
+cat("\nGenerating clean compound plot...\n")
+
+# Create compound plot (no main heading)
+compound_plot <- create_compound_plot(results$plots)
+
+# Save the compound plot
+output_file <- file.path(output_dir, "clean_compound_manhattan_image.png")
+cat("Saving compound plot to:", output_file, "\n")
+
+ggsave(output_file, compound_plot, 
+       width = 16, height = 5 * length(results$plots), 
+       units = "in", dpi = 300, bg = "white")
+
+# Save high-resolution PDF version
+output_pdf <- file.path(output_dir, "clean_compound_manhattan_image.pdf")
+cat("Saving PDF version to:", output_pdf, "\n")
+
+ggsave(output_pdf, compound_plot, 
+       width = 16, height = 5 * length(results$plots), 
+       units = "in", device = "pdf")
+
+# Save high-quality TIFF for publication
+output_tiff <- file.path(output_dir, "clean_compound_manhattan_image.tiff")
+cat("Saving TIFF version to:", output_tiff, "\n")
+
+ggsave(output_tiff, compound_plot, 
+       width = 16, height = 5 * length(results$plots), 
+       units = "in", dpi = 600, device = "tiff")
+
+# Save individual plots
+cat("Saving individual plots...\n")
+for (trait in names(results$plots)) {
+  individual_file <- file.path(output_dir, paste0("clean_", trait, "_manhattan_qq.png"))
+  ggsave(individual_file, results$plots[[trait]], 
+         width = 14, height = 5, units = "in", dpi = 300, bg = "white")
+}
+
+# Save summary statistics
+if (nrow(results$stats) > 0) {
+  stats_file <- file.path(output_dir, "clean_gwas_summary_image_traits.csv")
+  cat("Saving summary statistics to:", stats_file, "\n")
+  write.csv(results$stats, stats_file, row.names = FALSE)
+}
+
+# Print summary
+cat("\n", rep("=", 60), "\n")
+cat("CLEAN COMPOUND MANHATTAN PLOTS COMPLETE\n")
+cat(rep("=", 60), "\n")
+cat("Traits processed:", length(results$plots), "\n")
+cat("Models per trait:", length(models), "\n")
+cat("Features:\n")
+cat("  ✓ No main heading\n")
+cat("  ✓ Clean trait names (no suffixes)\n")
+cat("  ✓ Publication-ready styling\n")
+cat("  ✓ Panel labels (A, B, C)\n")
+cat("\nFiles generated:\n")
+cat("  - PNG:", output_file, "\n")
+cat("  - PDF:", output_pdf, "\n")
+cat("  - TIFF:", output_tiff, "\n")
+cat("  - Individual plots:", length(results$plots), "files\n")
+
+if (nrow(results$stats) > 0) {
+  cat("\nSummary statistics:\n")
+  print(results$stats)
+}
+
+cat("\nAnalysis completed successfully!\n")
+
