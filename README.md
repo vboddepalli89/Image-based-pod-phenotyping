@@ -1,4 +1,5 @@
-AI-assisted Image-Based Phenotyping Reveals Genetic Architecture of Pod Traits in Mungbean
+**AI-assisted Image-Based Phenotyping Reveals Genetic Architecture of Pod Traits in Mungbean**
+
 #Overview
 This repository accompanies the manuscript “AI-assisted Image-Based Phenotyping Reveals Genetic Architecture of Pod Traits in Mungbean.”
 It provides all R scripts and supplementary data used for image-based trait extraction, statistical analyses, and genomic association mapping.
