@@ -20,3 +20,13 @@ Phenotypic data were analyzed using mixed linear models to estimate BLUPs and he
 Genome-wide association studies were performed using GAPIT and SVEN to identify loci associated with pod traits.
 Genomic prediction analyses were conducted with rrBLUP to assess the accuracy of genomic selection.
 All analyses were performed in the R environment (v4.2.0 or later).
+
+All analyses were performed using R (version 4.2.0 or later).
+Key packages and versions used include:
+  GAPIT3 (version 3.1.0) – genome-wide association analysis
+  rrBLUP (version 4.6.1) – genomic prediction
+  sommer (version 4.3.3) – mixed model analysis
+  lme4 (version 1.1-34) – linear mixed-effects models
+  data.table (version 1.14.8) – high-performance data manipulation
+  ggplot2 (version 3.4.2) – visualization
+  dplyr (version 1.1.2) – data wrangling
