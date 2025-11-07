@@ -1,10 +1,5 @@
-# Set working directory
-setwd("C:/Users/naresh89/Desktop/My projects/gwas/pod phenotyping/pod_seed_gwas_final/SVEN")
-
-# Define corrected file path (ensure this file actually exists, this is a numerical output from TASSEL)
 file_path <- "C:/Users/naresh89/Desktop/My projects/gwas/pod phenotyping/pod_seed_gwas_final/SVEN/seed.txt"
 
-# Check if file exists
 file.exists(file_path)  # This should return TRUE
 
 # Read file content
@@ -21,37 +16,16 @@ cat("File compressed to:", gz_file_path, "\n")
 
 library(Matrix) # To create sparse matrices
 getwd()
-# MLScoreTraits_imputed.txt.gz is obtained from TASSEL after
-# first running a kNN imputation and then a simple average
-# imputation. Saved as numerical genotype. Then compressed
-# using gzip to save space on disk.
-
-# read the numeric genotype output from TASSEL
 snp = read.table("seed.txt.gz",header=T)
 dim(snp)
 snp$X.Marker.
-# The first column contains the name of the plants. Store the SNP values in X:
 X = as.matrix(snp[,-1])
-
-
-# Since major alleles are coded as 1 and minor alleles are 0
-# reverse the coding to have more zeros (which can be ignored)
-# This also does not affect the model except for a sign change of the coefficients.
 X = 1 - X
-
-# Check: the following should be much less than 0.5 for sparse format to be useful
-# If you find the answer is NA, there's probably still SNPs with missing alleles values.
 print(mean(X != 0))
-
-# Now find columns with MAF > 0.05
 mx = colMeans(X) > 0.05
 
 # Convert to sparse format, first filetering out columns wiht MAF < 0.05
 Z = Matrix(X[,mx],sparse = T)
-
-# assign the row names for later reference....
-# we need these to make sure the phenotype values are correctly
-# matched with the genotypes.
 rownames(Z) <- snp$X.Marker.
 saveRDS(Z,file="zmat_sparse.rds")
 
@@ -63,7 +37,6 @@ library(Matrix)
 # Load data
 Z <- readRDS("zmat_sparse.rds")
 pheno <- read.csv("C:\\Users\\naresh89\\Desktop\\My projects\\gwas\\pod phenotyping\\Genomic prediction\\rrBLUP\\blups.csv _phenotype.csv")
-# Ensure matching rownames
 pheno <- pheno[match(rownames(Z), pheno$Taxa), ]
 stopifnot(all(rownames(Z) == pheno$Taxa))
 
@@ -157,3 +130,4 @@ for (trait in traits) {
 cv_df <- do.call(rbind, cv_results)
 write.csv(cv_df, "rrBLUP_10fold_cv_foldwise_results.csv", row.names = FALSE)
 cat("\n10-fold CV for rrBLUP completed. Fold-wise results saved to 'rrBLUP_10fold_cv_foldwise_results.csv'\n")
+
