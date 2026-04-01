@@ -1,32 +1,64 @@
-**AI-assisted Image-Based Phenotyping Reveals Genetic Architecture of Pod Traits in Mungbean**
+# Image-based high-throughput phenotyping enables genetic analyses of pod morphological traits in mung bean (*Vigna radiata* (L.) R. Wilczek)
 
-#Overview
-This repository accompanies the manuscript “AI-assisted Image-Based Phenotyping Reveals Genetic Architecture of Pod Traits in Mungbean.”
-It provides all R scripts and supplementary data used for image-based trait extraction, statistical analyses, and genomic association mapping.
-The project integrates high-throughput phenotyping and genome-wide analyses to dissect the genetic basis of pod morphology and yield-related traits in mungbean (Vigna radiata).
-| File                               | Description                                                                                             |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| **01_descriptive_statistics.R**    | Performs descriptive statistical analyses and trait distribution visualization.                         |
-| **02_methods_comparison_fig2.Rmd** | Compares manual and image-based trait measurements (Figure 2).                                          |
-| **03_trait_blups.Rmd**             | Computes Best Linear Unbiased Predictors (BLUPs) using mixed linear models.                             |
-| **04_gwas_gapit_pipeline.Rmd**     | Implements Genome-Wide Association Study (GWAS) using GAPIT with multiple models (BLINK, FarmCPU, MLM). |
-| **05_gwas_sven_method.R**          | Executes the SVEN GWAS method for comparison with GAPIT results.                                        |
-| **06_rrblup_genomic_prediction.R** | Conducts genomic prediction (GP) using rrBLUP and evaluates predictive accuracy.                        |
-| **s02_venn_diagram_figS2.R**       | Generates Venn diagrams for overlapping significant SNPs (Supplementary Figure S2).                     |
+## Overview
+This repository accompanies the manuscript **"Image-based high-throughput phenotyping enables genetic analyses of pod morphological traits in mung bean (*Vigna radiata* (L.) R. Wilczek)"**, conditionally accepted in *G3: Genes|Genomes|Genetics*. It provides all R scripts used for statistical analyses, genome-wide association mapping (GWAS), and genomic prediction (GP).
 
-Methodological Summary
-Pod and seed traits were extracted through an AI-assisted image analysis pipeline developed for automated phenotyping.
-Phenotypic data were analyzed using mixed linear models to estimate BLUPs and heritability.
-Genome-wide association studies were performed using GAPIT and SVEN to identify loci associated with pod traits.
-Genomic prediction analyses were conducted with rrBLUP to assess the accuracy of genomic selection.
-All analyses were performed in the R environment (v4.2.0 or later).
+## Technical Summary of the Study
+To overcome the bottlenecks of manual phenotyping in legume breeding, we developed a high-throughput image-based phenotyping pipeline to quantify complex pod morphological traits (length, width, curvature, and seed number) across the Iowa Mungbean Diversity (IMD) panel. 
 
-All analyses were performed using R (version 4.2.0 or later).
-Key packages and versions used include:
-  GAPIT3 (version 3.1.0) – genome-wide association analysis
-  rrBLUP (version 4.6.1) – genomic prediction
-  sommer (version 4.3.3) – mixed model analysis
-  lme4 (version 1.1-34) – linear mixed-effects models
-  data.table (version 1.14.8) – high-performance data manipulation
-  ggplot2 (version 3.4.2) – visualization
-  dplyr (version 1.1.2) – data wrangling
+* **Phenotyping & Variance:** The automated pipeline achieved $>96\%$ correlation with manual measurements for linear traits while successfully quantifying complex shape traits like curvature. Mixed linear models were used to extract Best Linear Unbiased Estimators (BLUEs) and Predictors (BLUPs), revealing high broad-sense heritability across environments.
+* **Genomic Mapping:** Using the newly assembled gap-free, telomere-to-telomere (T2T) **'Weilv-9'** reference genome, we performed multi-locus GWAS (MLM, BLINK, FarmCPU, and SVEN). We identified 65 significant SNPs associated with pod traits.
+* **Candidate Genes:** We identified two high-confidence pleiotropic candidate genes: a *GH3* family indole-3-acetic acid-amido synthetase (regulating auxin and cell elongation) on Chromosome 4, and a *HAK5* potassium transporter (regulating turgor and growth) on Chromosome 6.
+* **Genomic Prediction:** Using the rrBLUP model, image-derived phenotypes yielded high prediction accuracies ($0.61–0.85$), notably achieving a 22% improvement in predicting pod curvature compared to traditional manual scoring.
+
+---
+
+## Repository Structure & File Descriptions
+
+| Script Name | Description |
+| :--- | :--- |
+| `01_descriptive_statistics.R` | Performs descriptive statistical analyses, outlier removal, and trait distribution visualization. |
+| `02_methods_comparison_fig2.Rmd` | Compares manual and image-based trait measurements to validate the pipeline (Generates Figure 2). |
+| `03_trait_blups.Rmd` | Computes Best Linear Unbiased Estimators (BLUEs) for GWAS and Best Linear Unbiased Predictors (BLUPs) for variance components using mixed linear models. |
+| `04_gwas_gapit_pipeline.Rmd` | Implements Genome-Wide Association Study (GWAS) using GAPIT3 with multiple models (BLINK, FarmCPU, MLM). |
+| `05_gwas_sven_method.R` | Executes the SVEN GWAS method for comparison with GAPIT results. |
+| `06_rrblup_genomic_prediction.R` | Conducts genomic prediction (GP) using rrBLUP and evaluates predictive accuracy via 10-fold cross-validation. |
+| `s02_venn_diagram_figS2.R` | Generates Venn diagrams for overlapping significant SNPs across GWAS models (Generates Supplementary Figure S2). |
+
+---
+
+## Data Linkage (Figshare & Supplementary Files)
+To ensure full reproducibility, the scripts in this repository are directly linked to the Supplementary Tables provided with the manuscript and the genotypic data hosted on Figshare.
+
+**Inputs (Data required to run the scripts):**
+* **Scripts `01`, `02`, and `03`** use **Supplemental Table 1** (Raw data of the pod traits).
+* **Scripts `04` and `05` (GWAS)** use the genotypic dataset (available on Figshare) and **Supplemental Table 3** (BLUEs of pod traits).
+* **Script `06` (Genomic Prediction)** uses the genotypic dataset and **Supplemental Table 5** (BLUPs of pod traits).
+
+**Outputs (Data generated by the scripts):**
+* **Scripts `04` and `05`** generate the association results found in **Supplemental Table 4** (GWAS results from all four models) and **Supplemental Figure 1**.
+* **Script `06`** generates the prediction accuracies and breeding values found in **Supplemental Table 6** (rrBLUP generated GEBVs) and **Supplemental Table 7** (10_cv_foldwise_results).
+
+*Note: All physical genomic positions referenced in the outputs are based on the T2T 'Weilv-9' reference genome.*
+
+---
+
+## Software Requirements
+All analyses were performed using R (version 4.2.0 or later). Key packages and versions used include: 
+* `GAPIT3` (v3.1.0) – genome-wide association analysis 
+* `rrBLUP` (v4.6.1) – genomic prediction 
+* `sommer` (v4.3.3) – mixed model analysis 
+* `lme4` (v1.1-34) – linear mixed-effects models 
+* `data.table` (v1.14.8) – high-performance data manipulation 
+* `ggplot2` (v3.4.2) – visualization 
+* `dplyr` (v1.1.2) – data wrangling
+
+---
+
+## Citation
+If you use the data, code, or pipeline in this repository, please cite:
+> Boddepalli, V. N., Jubery, T., Cannon, S., Dutta, S., Ganapathysubramanyan, B., & Singh, A. (2026). Image-based high-throughput phenotyping enables genetic analyses of pod morphological traits in mung bean (*Vigna radiata* (L.) R. Wilczek). *G3: Genes|Genomes|Genetics*. [Link to be added upon publication]
+
+## Contact
+**Venkata Naresh Boddepalli** Department of Agronomy, Iowa State University  
+Email: [Insert your email address here]
